@@ -8,9 +8,9 @@ const options = {
   swaggerDefinition: {
     openapi: '3.0.0',
     info: {
-      title: 'User Management API',
+      title: ': Enhanced Authentication API',
       version: '1.0.0',
-      description: 'API for user management operations',
+      description: 'API for user management operations By Himjyoti Talukdar',
     },
     servers: [
       {
