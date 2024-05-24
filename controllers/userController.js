@@ -1,17 +1,41 @@
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 
+const jwt = require('jsonwebtoken');
+
+exports.protect = async (req, res, next) => {
+    try {
+        // Get token from request headers
+        const token = req.headers.authorization.split(' ')[1];
+
+        // Verify token
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        // Add user information to request object
+        req.user = decoded;
+
+        // Proceed to the next middleware
+        next();
+    } catch (error) {
+        // Handle token verification error
+        res.status(401).json({ message: 'Unauthorized' });
+    }
+};
 
 // Get logged-in user's profile
 const getUserProfile = async (req, res) => {
     try {
-        const user = await User.findById(req.user._id).select('-password');
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-        res.status(200).json(user);
+        // Access user information from request object (added by the protect middleware)
+        const userId = req.user.id;
+
+        // Use userId to retrieve user profile from database
+        const userProfile = await UserProfileModel.findById(userId);
+
+        // Return user profile in response
+        res.status(200).json(userProfile);
     } catch (error) {
-        res.status(500).json({ message: 'Server error', error: error.message });
+        // Handle errors
+        res.status(500).json({ message: 'Server error' });
     }
 };
 
