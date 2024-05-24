@@ -1,48 +1,69 @@
-const User = require('../models/User');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const User = require('../models/User');
+const passport = require('passport');
 
-const generateToken = (id) => {
-    return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
+// Helper function to generate JWT token
+const generateToken = (userId) => {
+    return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '1h' });
 };
 
-exports.registerUser = async (req, res) => {
-    const { username, email, password } = req.body;
-    const userExists = await User.findOne({ email });
-
-    if (userExists) {
-        return res.status(400).json({ message: 'User already exists' });
+const registerUser = async (req, res) => {
+    try {
+        const { username, email, password } = req.body;
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            return res.status(400).json({ message: 'Oops, User already exists' });
+        }
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const newUser = new User({ username, email, password: hashedPassword });
+        await newUser.save();
+        const token = generateToken(newUser._id);
+        res.status(200).json({ message: 'User registered successfully', token });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error' });
     }
+};
 
-    const user = await User.create({ username, email, password });
+const loginUser = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const user = await User.findOne({ email });
+        if (!user || !(await bcrypt.compare(password, user.password))) {
+            return res.status(400).json({ message: 'Invalid credentials' });
+        }
+        const token = generateToken(user._id);
+        res.status(200).json({ message: 'User logged in successfully', token });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error' });
+    }
+};
 
-    if (user) {
-        res.status(201).json({
-            _id: user._id,
-            username: user.username,
-            email: user.email,
-            token: generateToken(user._id),
+const logoutUser = (req, res) => {
+    try {
+        // Invalidate the user session by clearing the cookie
+        res.clearCookie('user_id');
+        req.logout((err) => {
+            if (err) {
+                return res.status(500).json({ message: 'Logout error' });
+            }
+            res.status(200).json({ message: 'User logged out successfully' });
         });
-    } else {
-        res.status(400).json({ message: 'Invalid user data' });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error' });
     }
 };
 
-exports.authUser = async (req, res) => {
-    const { email, password } = req.body;
-    const user = await User.findOne({ email });
-
-    if (user && (await user.matchPassword(password))) {
-        res.json({
-            _id: user._id,
-            username: user.username,
-            email: user.email,
-            token: generateToken(user._id),
-        });
-    } else {
-        res.status(401).json({ message: 'Invalid email or password' });
-    }
+const googleAuthCallback = (req, res) => {
+    passport.authenticate('google', { failureRedirect: '/login' })(req, res, () => {
+        const token = generateToken(req.user._id);
+        res.redirect(`/?token=${token}`); // Redirect to the desired route with the token
+    });
 };
 
-exports.logoutUser = (req, res) => {
-    res.json({ message: 'User logged out' });
+module.exports = {
+    registerUser,
+    loginUser,
+    logoutUser,
+    googleAuthCallback,
 };

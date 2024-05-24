@@ -1,42 +1,66 @@
+const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 
-exports.getUserProfile = async (req, res) => {
-    const user = await User.findById(req.user._id);
 
-    if (user) {
-        res.json(user);
-    } else {
-        res.status(404).json({ message: 'User not found' });
-    }
-};
-
-exports.updateUserProfile = async (req, res) => {
-    const user = await User.findById(req.user._id);
-
-    if (user) {
-        user.username = req.body.username || user.username;
-        user.email = req.body.email || user.email;
-        user.photo = req.body.photo || user.photo;
-        user.bio = req.body.bio || user.bio;
-        user.phone = req.body.phone || user.phone;
-        if (req.body.password) {
-            user.password = req.body.password;
+// Get logged-in user's profile
+const getUserProfile = async (req, res) => {
+    try {
+        const user = await User.findById(req.user._id).select('-password');
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
         }
-        user.isPublic = req.body.isPublic !== undefined ? req.body.isPublic : user.isPublic;
-
-        const updatedUser = await user.save();
-        res.json(updatedUser);
-    } else {
-        res.status(404).json({ message: 'User not found' });
+        res.status(200).json(user);
+    } catch (error) {
+        res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
 
-exports.listPublicProfiles = async (req, res) => {
-    const users = await User.find({ isPublic: true }).select('-password');
-    res.json(users);
+// Edit logged-in user's profile
+const editUserProfile = async (req, res) => {
+    try {
+        const { password, ...updates } = req.body;
+        const updateFields = { ...updates };
+
+        if (password) {
+            updateFields.password = await bcrypt.hash(password, 10);
+        }
+
+        const user = await User.findByIdAndUpdate(req.user._id, updateFields, { new: true }).select('-password');
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        res.status(200).json(user);
+    } catch (error) {
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
 };
 
-exports.getAllProfiles = async (req, res) => {
-    const users = await User.find().select('-password');
-    res.json(users);
+// Get all public user profiles
+const getAllPublicProfiles = async (req, res) => {
+    try {
+        const users = await User.find({ profilePublic: true }).select('-password');
+        res.status(200).json(users);
+    } catch (error) {
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+};
+
+// Get all user profiles (admin only)
+const getAllProfiles = async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: 'Forbidden, admin access only' });
+        }
+        const users = await User.find().select('-password');
+        res.status(200).json(users);
+    } catch (error) {
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+};
+
+module.exports = {
+    getUserProfile,
+    editUserProfile,
+    getAllPublicProfiles,
+    getAllProfiles,
 };
